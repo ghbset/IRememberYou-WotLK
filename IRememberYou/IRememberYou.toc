@@ -1,0 +1,15 @@
+## Interface: 11509, 16001, 20506, 38002, 50504, 120100
+
+## Title: I Remember You
+## Author: Bettiold
+## SavedVariables: memory, announce, iconDegrees_iry, hideIcon_iry, dbIRY, settgsIRY
+## Version: 1.0
+## Notes: Remember players you played with
+## IconTexture: Interface\Icons\Spell_frost_manarecharge
+
+Libs\LibStub.lua
+Libs\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0.lua
+
+main.lua
