@@ -1,15 +1,17 @@
-## Interface: 11509, 16001, 20506, 38002, 50504, 120100
-
+## Interface: 30300
 ## Title: I Remember You
-## Author: Bettiold
-## SavedVariables: memory, announce, iconDegrees_iry, hideIcon_iry, dbIRY, settgsIRY
-## Version: 1.0
+## Author: Bettiold (WotLK 3.3.5a port for DragonUI)
 ## Notes: Remember players you played with
-## IconTexture: Interface\Icons\Spell_frost_manarecharge
+## Version: 1.0-wotlk
+## Dependencies: DragonUI
+## SavedVariables: memory, announce, iconDegrees_iry, hideIcon_iry, dbIRY, settgsIRY
 
+# LibStub and CallbackHandler-1.0 come from DragonUI (a required dependency, loaded first). Shipping the
+# modern CallbackHandler here would replace DragonUI's in memory with one that calls securecallfunction,
+# which 3.3.5 does not have.
 Libs\LibStub.lua
-Libs\CallbackHandler-1.0.lua
 Libs\LibDataBroker-1.1.lua
 Libs\LibDBIcon-1.0.lua
 
+ui.lua
 main.lua

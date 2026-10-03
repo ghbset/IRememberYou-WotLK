@@ -1,5 +1,22 @@
+local _, IRY = ...
 local tocVersion = select(4,GetBuildInfo())
+local ShowRememberDialog, ShowConfirmDialog -- the modern dialogs, built further down
 local forever = tocVersion >= 16001 and tocVersion <= 16999
+
+-- WotLK 3.3.5a port: stand-ins for APIs this client does not have.
+local GetNumGroupMembers = GetNumGroupMembers or function()
+  local raid = GetNumRaidMembers()
+  if raid > 0 then return raid end
+  local party = GetNumPartyMembers()
+  return party > 0 and party + 1 or 0
+end
+local IsInRaid = IsInRaid or function() return GetNumRaidMembers() > 0 end
+local GetNormalizedRealmName = GetNormalizedRealmName or function() return (GetRealmName():gsub("[%s%-]","")) end
+local GetServerTime = GetServerTime or time
+local After = (C_Timer and C_Timer.After) or function(delay,func)
+  local f,t = CreateFrame("Frame"),0
+  f:SetScript("OnUpdate",function(self,e) t = t + e if t >= delay then self:SetScript("OnUpdate",nil) func() end end)
+end
 
 local function stripRealm(n)
   if forever and type(n) == "string" then return (n:gsub("%-.*$","")) end
@@ -304,52 +321,63 @@ local LDB = LibStub("LibDataBroker-1.1"):NewDataObject("IRememberYou",{
 
 local bigFrame = CreateFrame("Frame","IRememberYouMainFrame",UIParent)
 tinsert(UISpecialFrames, "IRememberYouMainFrame")
-bigFrame:SetSize(640+16+8,320+34 +30)
+bigFrame:SetSize(640+16+8 +8,320+34 +30 +24+6)
 bigFrame:SetPoint("CENTER",0,0)
+bigFrame:SetFrameStrata("HIGH")
+bigFrame:SetClampedToScreen(true)
+bigFrame:EnableMouse(true) -- 3.3.5 does not enable the mouse for a frame's scripts: without this clicks fell through
 bigFrame:SetMovable(true)
 bigFrame:SetScript("OnMouseDown",bigFrame.StartMoving)
 bigFrame:SetScript("OnMouseUp",bigFrame.StopMovingOrSizing)
+IRY.Chrome(bigFrame)
 bigFrame:Hide()
+-- the original layout, inside the metal frame's ground
+local bigContent = CreateFrame("Frame",nil,bigFrame)
+bigContent:SetSize(640+16+8,320+34 +30)
+bigContent:SetPoint("TOPLEFT",4,-24)
 
-local mainFrame = CreateFrame("Frame",nil,bigFrame,"BackdropTemplate")
+-- 3.3.5 has no SetClipsChildren: a ScrollFrame clips its scroll child, so the rows live in one.
+local mainFrameClip = CreateFrame("ScrollFrame",nil,bigContent)
+mainFrameClip:SetSize(640+16+8,320)
+mainFrameClip:SetPoint("TOPLEFT",0,-34 -30)
+local mainFrame = CreateFrame("Frame",nil,mainFrameClip)
 mainFrame:SetSize(640+16+8,320)
 mainFrame:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
 })
-mainFrame:SetBackdropColor(0,0,0)
-mainFrame:SetPoint("TOPLEFT",0,-34 -30)
-mainFrame:SetClipsChildren(true)
+mainFrame:SetBackdropColor(0,0,0,0.35)
+mainFrameClip:SetScrollChild(mainFrame)
 
-local mainFrameHeader = CreateFrame("Frame",nil,bigFrame,"BackdropTemplate")
+local mainFrameHeader = CreateFrame("Frame",nil,bigContent)
 mainFrameHeader:SetSize(640+16+8,34 +30)
 mainFrameHeader:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
 })
-mainFrameHeader:SetBackdropColor(0,0,0)
+mainFrameHeader:SetBackdropColor(0,0,0,0)
 mainFrameHeader:SetPoint("TOPLEFT",0,0)
 
-local mainFrameHeaderLine = CreateFrame("Frame",nil,mainFrameHeader,"BackdropTemplate")
+local mainFrameHeaderLine = CreateFrame("Frame",nil,mainFrameHeader)
 mainFrameHeaderLine:SetSize(640+16+8,2)
 mainFrameHeaderLine:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
 })
-mainFrameHeaderLine:SetBackdropColor(1,0.7529,0)
+mainFrameHeaderLine:SetBackdropColor(0.62,0.52,0.3,0.55)
 mainFrameHeaderLine:SetPoint("TOPLEFT",0,-34+2)
 
-local mainFrameHeaderLineBot = CreateFrame("Frame",nil,mainFrameHeader,"BackdropTemplate")
+local mainFrameHeaderLineBot = CreateFrame("Frame",nil,mainFrameHeader)
 mainFrameHeaderLineBot:SetSize(640+16+8,2)
 mainFrameHeaderLineBot:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
 })
-mainFrameHeaderLineBot:SetBackdropColor(1,0.7529,0)
+mainFrameHeaderLineBot:SetBackdropColor(0.62,0.52,0.3,0.55)
 mainFrameHeaderLineBot:SetPoint("TOPLEFT",0,-34-28)
 
-local sortName = CreateFrame("Button",nil,mainFrameHeader,"BackdropTemplate")
+local sortName = CreateFrame("Button",nil,mainFrameHeader)
 sortName:SetSize(200,28)
 sortName:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
 })
-sortName:SetBackdropColor(0,0,0)
+sortName:SetBackdropColor(0,0,0,0)
 sortName:SetPoint("TOPLEFT",0,-34)
 local sortNameText = sortName:CreateFontString(nil,"OVERLAY","GameFontHighlight")
 sortNameText:SetSize(194,28)
@@ -358,20 +386,20 @@ sortNameText:SetJustifyH("LEFT")
 sortNameText:SetJustifyV("MIDDLE")
 sortNameText:SetText(T["SORTNAME"])
 sortName:SetScript("OnEnter",function()
-  sortName:SetBackdropColor(0.125,0.125,0.125)
+  sortName:SetBackdropColor(1,1,1,0.08)
   sortNameText:SetTextColor(1,0.7529,0)
 end)
 sortName:SetScript("OnLeave",function()
-  sortName:SetBackdropColor(0,0,0)
+  sortName:SetBackdropColor(0,0,0,0)
   sortNameText:SetTextColor(1,1,1)
 end)
 
-local sortDescription = CreateFrame("Button",nil,mainFrameHeader,"BackdropTemplate")
+local sortDescription = CreateFrame("Button",nil,mainFrameHeader)
 sortDescription:SetSize(255,28)
 sortDescription:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
 })
-sortDescription:SetBackdropColor(0,0,0)
+sortDescription:SetBackdropColor(0,0,0,0)
 sortDescription:SetPoint("TOPLEFT",200,-34)
 local sortDescriptionText = sortDescription:CreateFontString(nil,"OVERLAY","GameFontHighlight")
 sortDescriptionText:SetSize(249,28)
@@ -380,11 +408,11 @@ sortDescriptionText:SetJustifyH("LEFT")
 sortDescriptionText:SetJustifyV("MIDDLE")
 sortDescriptionText:SetText(T["SORTDESC"])
 sortDescription:SetScript("OnEnter",function()
-  sortDescription:SetBackdropColor(0.125,0.125,0.125)
+  sortDescription:SetBackdropColor(1,1,1,0.08)
   sortDescriptionText:SetTextColor(1,0.7529,0)
 end)
 sortDescription:SetScript("OnLeave",function()
-  sortDescription:SetBackdropColor(0,0,0)
+  sortDescription:SetBackdropColor(0,0,0,0)
   sortDescriptionText:SetTextColor(1,1,1)
 end)
 
@@ -476,26 +504,27 @@ sortDescription:SetScript("OnClick",function()
 end)
 
 local mainFrameHeaderTitle = mainFrameHeader:CreateFontString(nil,"OVERLAY","GameFontHighlightMedium")
-mainFrameHeaderTitle:SetSize(160,32)
-mainFrameHeaderTitle:SetPoint("TOPLEFT",6,0)
-mainFrameHeaderTitle:SetJustifyH("LEFT")
+mainFrameHeaderTitle:SetFontObject(GameFontNormal)
+mainFrameHeaderTitle:SetSize(300,16)
+mainFrameHeaderTitle:SetPoint("TOP",bigFrame,"TOP",0,-4)
+mainFrameHeaderTitle:SetJustifyH("CENTER")
 mainFrameHeaderTitle:SetJustifyV("MIDDLE")
 mainFrameHeaderTitle:SetText(T["FRAMETITLE"])
 
-local mainFrameEditBg = CreateFrame("Frame",nil,mainFrameHeader,"BackdropTemplate")
+local mainFrameEditBg = CreateFrame("Frame",nil,mainFrameHeader)
 local mainFrameHeaderInfo = mainFrameEditBg:CreateFontString(nil,"OVERLAY","GameFontHighlightMedium")
-mainFrameHeaderInfo:SetSize(160,32)
+mainFrameHeaderInfo:SetSize(160,22)
 mainFrameHeaderInfo:SetPoint("TOPLEFT",-160-6,0)
 mainFrameHeaderInfo:SetJustifyH("RIGHT")
 mainFrameHeaderInfo:SetJustifyV("MIDDLE")
 mainFrameHeaderInfo:SetText("Search")
 
-mainFrameEditBg:SetSize(160,32)
+mainFrameEditBg:SetSize(180,22)
 mainFrameEditBg:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
 })
-mainFrameEditBg:SetBackdropColor(0.2,0.2,0.2)
-mainFrameEditBg:SetPoint("TOPLEFT",640+16+8-28-2-2-160-28,0)
+mainFrameEditBg:SetBackdropColor(0,0,0,0.55)
+mainFrameEditBg:SetPoint("TOPLEFT",392,-6)
 local mainFrameEdit = CreateFrame("EditBox",nil,mainFrameEditBg)
 mainFrameEdit:SetAllPoints()
 mainFrameEdit:SetAutoFocus(false)
@@ -507,26 +536,18 @@ mainFrameEdit:SetScript("OnEscapePressed",function()
 end)
 mainFrameEditBg:Hide()
 
-local function newButton(x,y,path,color,coords)
-  local button = CreateFrame("Button",nil,mainFrameHeader)
-  button:SetSize(28,28)
-  button:SetPoint("TOPLEFT",x,y)
-  button.tex = button:CreateTexture(nil,"OVERLAY")
-  button.tex:SetTexture("Interface\\AddOns\\IRememberYou\\"..path)
-  if coords then button.tex:SetTexCoord(unpack(coords)) end
-  button.tex:SetVertexColor(unpack(color))
-  button.tex:SetAllPoints()
-
-  button:SetScript("OnEnter",function() button.tex:SetVertexColor(1,1,1) end)
-  button:SetScript("OnLeave",function() button.tex:SetVertexColor(unpack(color)) end)
+local toolSelected = -1
+local btnExit = IRY.CloseButton(bigFrame,function() bigFrame:Hide() end)
+local function headerButton(x,label)
+  local button = IRY.RedButton(mainFrameHeader,label,80,22)
+  button:SetPoint("TOPLEFT",x,-6)
   return button
 end
-
-local toolSelected = -1
-local btnExit = newButton(634,-2,"tools",{0.9569,0.2627,0.2118},{0.5,1,0.5,1})
-local btnAdd = newButton(606,-2,"tools",{1,0.7529,0},{0,0.5,0,0.5})
-local btnSearch = newButton(578,-2,"tools",{1,0.7529,0},{0,0.5,0.5,1})
-local btnSettings = newButton(550,-2,"toggle",{1,0.7529,0})
+local btnAdd = headerButton(580,T["ADD"])
+-- the add button doubles as "back" while a field or the settings are open (the icon version swapped texcoords)
+btnAdd.tex = {SetVertexColor = function() end, SetTexCoord = function(_,l) btnAdd:SetText(l == 0 and T["ADD"] or T["BACK"]) end}
+local btnSearch = headerButton(496,T["SEARCH"])
+local btnSettings = headerButton(412,SETTINGS or "Settings")
 
 local function resetAddIcon(clear)
   btnSearch:Show()
@@ -551,7 +572,7 @@ btnSearch:SetScript("OnClick",function()
   toolSelected = 2
 end)
 
-local mainFrameScrollHit = CreateFrame("Frame",nil,bigFrame,"BackdropTemplate")
+local mainFrameScrollHit = CreateFrame("Frame",nil,bigContent)
 mainFrameScrollHit:SetSize(24,320)
 mainFrameScrollHit:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
@@ -577,7 +598,7 @@ mainFrameScrollHit:SetScript("OnMouseDown",scrollDown)
 mainFrameScrollHit:SetScript("OnMouseUp",scrollUp)
 mainFrameScrollHit:SetAlpha(0)
 
-local mainFrameScrollBackground = CreateFrame("Frame",nil,bigFrame,"BackdropTemplate")
+local mainFrameScrollBackground = CreateFrame("Frame",nil,bigContent)
 mainFrameScrollBackground:SetSize(4,320-8-8)
 mainFrameScrollBackground:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
@@ -585,7 +606,7 @@ mainFrameScrollBackground:SetBackdrop({
 mainFrameScrollBackground:SetBackdropColor(0.3,0.3,0.3)
 mainFrameScrollBackground:SetPoint("TOPLEFT",640+8+2,-8-34-30)
 
-mainFrameScrollHand = CreateFrame("Button",nil,bigFrame)
+mainFrameScrollHand = CreateFrame("Button",nil,bigContent)
 mainFrameScrollHand:SetSize(12.25,21)
 mainFrameScrollHand:SetPoint("TOPLEFT",640+5.875,-5.875-34-30)
 mainFrameScrollHandTexture = mainFrameScrollHand:CreateTexture(nil,"OVERLAY")
@@ -643,10 +664,10 @@ settgParent:SetAllPoints()
 settgParent:Hide()
 local settgOffset = -6
 local function newSetting(id,label,settg)
-  local button = CreateFrame("Frame",nil,settgParent,"BackdropTemplate")
+  local button = CreateFrame("Frame",nil,settgParent)
   button:SetSize(664,28)
   button:SetBackdrop({bgFile = "Interface\\Buttons\\WHITE8x8"})
-  button:SetBackdropColor(0,0,0)
+  button:SetBackdropColor(0,0,0,0)
   settgOffset = settgOffset - 28
   button:SetPoint("TOPLEFT",0,settgOffset)
 
@@ -659,18 +680,18 @@ local function newSetting(id,label,settg)
 
   button:SetScript("OnEnter",function()
     button.font:SetTextColor(1,0.7529,0)
-    button:SetBackdropColor(0.125,0.125,0.125)
+    button:SetBackdropColor(1,1,1,0.08)
   end)
   button:SetScript("OnLeave",function()
     button.font:SetTextColor(1,1,1)
-    button:SetBackdropColor(0,0,0)
+    button:SetBackdropColor(0,0,0,0)
   end)
   button:SetScript("OnMouseDown",function()
     settg = not settg
     button.font:SetText(label..": "..state[settg])
     if id == 1 then
       dbIRY.minimap.hide = settg
-      buttonIRY:SetShown(not settg)
+      if settg then buttonIRY:Hide() else buttonIRY:Show() end
     elseif id == 2 then settgsIRY.sound = settg
     elseif id == 3 then settgsIRY.chat = settg 
     elseif id == 4 then
@@ -712,7 +733,7 @@ btnAdd:SetScript("OnClick",function()
   elseif toolSelected == 3 then
     resetAddIcon()
     mainFrameHeaderTitle:SetText(T["FRAMETITLE"])
-    mainFrame:Show()--todo
+    mainFrameClip:Show()
     mainFrameHeader:SetHeight(34 +30)
     mainFrameScrollHit:EnableMouse(true)
     mainFrameScrollHand:Show()
@@ -727,7 +748,7 @@ btnSettings:SetScript("OnClick",function()
   btnSettings:Hide()
   btnAdd.tex:SetTexCoord(0.5,1,0,0.5)
   mainFrameHeaderTitle:SetText("Settings")--todo
-  mainFrame:Hide()
+  mainFrameClip:Hide()
   mainFrameHeader:SetHeight(34 +30+320)
   mainFrameScrollHit:EnableMouse(false)
   mainFrameScrollHand:Hide()
@@ -827,6 +848,7 @@ mainFrameEdit:SetScript("OnEnterPressed",function()
   end
 end)
 
+mainFrame:EnableMouseWheel(true)
 mainFrame:SetScript("OnMouseWheel",function(_,delta)
   local maxUsers = #memory - 10
   if (smemory ~= nil) then maxUsers = #smemory - 10 end
@@ -861,12 +883,12 @@ local function getClassCoords(class)
 end
 
 local function createUserFrame(offset)
-local userFrame = CreateFrame("Frame",nil,mainFrame,"BackdropTemplate")
+local userFrame = CreateFrame("Frame",nil,mainFrame)
 userFrame:SetSize(640,32)
 userFrame:SetBackdrop({
   bgFile = "Interface\\Buttons\\WHITE8x8"
 })
-userFrame:SetBackdropColor(0,0,0)
+userFrame:SetBackdropColor(0,0,0,0)
 userFrame:SetPoint("TOPLEFT",0,offset)
 if #userFrames > 0 then
   userFrame:SetFrameLevel(userFrames[#userFrames]:GetFrameLevel() + 1)
@@ -900,7 +922,7 @@ userFrame.userFrameUpdateIcon = function()
   
   if userFrame.class == "UNKNOWN" then
     userClass:SetTexture("Interface\\AddOns\\IRememberYou\\unknown")
-    userClass:SetTexCoord(0, 1, 0, 1)
+    userClass:SetTexCoord(0, 0.875, 0, 0.875) -- unknown.tga padded 56 -> 64
   else
     userClass:SetTexture("Interface\\TARGETINGFRAME\\UI-CLASSES-CIRCLES")
     userClass:SetTexCoord(getClassCoords(userFrame.class))
@@ -924,7 +946,7 @@ userFrame.userFrameUpdate = function(shift)
 
   if userFrame.class == "UNKNOWN" then
     userClass:SetTexture("Interface\\AddOns\\IRememberYou\\unknown")
-    userClass:SetTexCoord(0, 1, 0, 1)
+    userClass:SetTexCoord(0, 0.875, 0, 0.875) -- unknown.tga padded 56 -> 64
   else
     userClass:SetTexture("Interface\\TARGETINGFRAME\\UI-CLASSES-CIRCLES")
     userClass:SetTexCoord(getClassCoords(userFrame.class))
@@ -956,7 +978,7 @@ userBlockFrame:SetScript("OnEnter",function(self,motion)
   userDelete:Show()
   userName:SetTextColor(1,0.7529,0)
   userNote:SetTextColor(1,0.7529,0)
-  userFrame:SetBackdropColor(0.125,0.125,0.125)
+  userFrame:SetBackdropColor(1,1,1,0.08)
   userBlockFrame:EnableMouse(false)
 end)
 userFrame.userFrameOnLeave = function()
@@ -964,7 +986,7 @@ userFrame.userFrameOnLeave = function()
   userDelete:Hide()
   userFrame.updateColor()
   userNote:SetTextColor(1,1,1)
-  userFrame:SetBackdropColor(0,0,0)
+  userFrame:SetBackdropColor(0,0,0,0)
   userBlockFrame:EnableMouse(true)
 end
 userFrame.userFrameOnLeaveAsk = function()
@@ -982,14 +1004,16 @@ local function createText(parent,w,h,x,y)
   t:SetJustifyV("MIDDLE")
   t:SetWordWrap(false)
 
-  t:SetScript("OnEnter",function()
-    t:SetWordWrap(true)
-  end)
+  if t.SetScript then -- not on 3.3.5: FontStrings take no scripts
+    t:SetScript("OnEnter",function()
+      t:SetWordWrap(true)
+    end)
 
-  t:SetScript("OnLeave",function()
-    userFrame.userFrameOnLeaveAsk()
-    t:SetWordWrap(false)
-  end)
+    t:SetScript("OnLeave",function()
+      userFrame.userFrameOnLeaveAsk()
+      t:SetWordWrap(false)
+    end)
+  end
   return t
 end
 
@@ -997,7 +1021,7 @@ userClass = userFrame:CreateTexture(nil,"ARTWORK")
 userClass:SetSize(28,28)
 if userFrame.class == "UNKNOWN" then
   userClass:SetTexture("Interface\\AddOns\\IRememberYou\\unknown")
-  userClass:SetTexCoord(0, 1, 0, 1)
+  userClass:SetTexCoord(0, 0.875, 0, 0.875) -- unknown.tga padded 56 -> 64
 else
   userClass:SetTexture("Interface\\TARGETINGFRAME\\UI-CLASSES-CIRCLES")
   userClass:SetTexCoord(getClassCoords(userFrame.class))
@@ -1045,7 +1069,8 @@ userEdit:SetScript("OnClick",function()
   
   local data = {}
   data.playerName = userFrame.name
-  data.callback = function(argNote, argName)
+  data.class = userFrame.class
+  data.callback = function(argNote, argName, argClass)
     if not argName or strtrim(argName) == "" then argName = userFrame.name end
     argName = stripRealm(argName)
     local oldName = userFrame.name
@@ -1055,6 +1080,7 @@ userEdit:SetScript("OnClick",function()
         memory[i].name = argName
         memory[i].mood = snapValue
         memory[i].text = argNote
+        if argClass then memory[i].class = argClass end
         
         if nameChanged then
           dbNotes[argName] = dbNotes[oldName]
@@ -1068,9 +1094,10 @@ userEdit:SetScript("OnClick",function()
     userFrame.name = argName
     userName:SetText(argName)
     userFrame.userFrameEdit(snapValue,argNote)
+    if argClass then userFrame.userFrameUpdateIcon() end
+    refreshMark()
   end
-  local popup = StaticPopup_Show("REMEMBER",nil,nil,data)
-  if popup ~= nil then popup:SetHeight(190) end
+  ShowRememberDialog(data)
 end)
 
 userDelete = CreateFrame("Button",nil,userFrame)
@@ -1102,6 +1129,7 @@ userDelete:SetScript("OnClick",function()
     end
     memory = new_memory
     dbNotes[userFrame.name] = nil
+    refreshMark()
     --UPDATE SMEMORY IF NEEDED
     local maxUsers = #memory - 10
     if (smemory ~= nil) then
@@ -1138,11 +1166,7 @@ userDelete:SetScript("OnClick",function()
     --selectedName = ""
     --closeButton:Hide()
   end
-  if deletePopup ~= nil and deletePopup:IsVisible() then deletePopup:Hide() end
-  deletePopup = StaticPopup_Show("DELETE", nil, nil, data);
-  if deletePopup ~= nil then
-    _G[deletePopup:GetName().."Text"]:SetPoint("TOP",0,-16)
-  end
+  ShowConfirmDialog(T["DELETE1"]..data.selectedName..T["DELETE2"],data.callback)
 end)
 
 userFrames[#userFrames + 1] = userFrame
@@ -1150,7 +1174,12 @@ return userFrame
 end
 --MYTESTPLACEEND
 
-T["FONT"] = "SystemFont22_Shadow_Outline"
+T["FONT"] = "IRememberYouAnnounceFont"
+if not _G[T["FONT"]] then
+  local font = CreateFont(T["FONT"])
+  font:SetFont(STANDARD_TEXT_FONT,22,"OUTLINE")
+  font:SetShadowOffset(1,-1)
+end
 local classicEra = tocVersion < 40402
 local classic = false
 if tocVersion < 100200 then
@@ -1203,7 +1232,7 @@ function test()
   clock = GetTime()
   animating = true
   running = true
-  if not settgsIRY.sound then PlaySound(236275,"Master") end
+  if not settgsIRY.sound then PlaySound("igQuestListComplete") end
   framee:Show()
   text:SetText(to_announce[1])
 end
@@ -1235,21 +1264,20 @@ function bounce(t, b, c, d)
   end
 end
 
-local testframe = CreateFrame("Frame","TestFrame",TargetFrame);
-local posMark = {x=-45,y=0}
-if not modernUI then
-  posMark = {x=-64,y=2}
-end
-testframe:SetPoint("BOTTOMRIGHT", -45, 0);
+local testframe = CreateFrame("Frame","IRememberYouTargetMark",TargetFrame);
+-- Anchored to the portrait, which DragonUI places like Dragonflight's: under its lower edge, left of its corner.
+local posMark = {x=-18,y=-21}
+testframe:SetPoint("BOTTOMRIGHT", TargetFramePortrait, "BOTTOMRIGHT", posMark.x, posMark.y);
 testframe:SetSize(16, 32);
-testframe:SetFrameStrata("MEDIUM")
-testframe:SetFrameLevel(2)
+testframe:SetFrameStrata(TargetFrame:GetFrameStrata())
+testframe:SetFrameLevel(TargetFrame:GetFrameLevel() + 10)
+testframe:Hide()
 local texturee = testframe:CreateTexture(nil, "OVERLAY");
 --texturee:SetTexture("Interface\\Buttons\\UI-StopButton");
 texturee:SetTexture("Interface\\AddOns\\IRememberYou\\mark")
 texturee:SetAllPoints();
 
-local sliderTextureFrame = CreateFrame("Frame","sliderTextureFrame",StaticPopup1);
+local sliderTextureFrame = CreateFrame("Frame","sliderTextureFrame",UIParent);
 --sliderTextureFrame:SetFrameStrata("TOOLTIP")
 --sliderTextureFrame:SetFrameLevel(4)
 sliderTextureFrame:SetAlpha(1)
@@ -1268,13 +1296,13 @@ local Slider = CreateFrame("Slider", "SliderAddonSlider", sliderTextureFrame, "O
 Slider:SetPoint("TOP", 0, 5);
 Slider:SetWidth(160);
 Slider:SetHeight(32);
-Slider.Thumb:Hide()
+Slider:GetThumbTexture():Hide()
 
 Slider:SetMinMaxValues(-1,1);
 Slider:SetValue(0);
 Slider:SetValueStep(0.1);
-Slider.Low:Hide();
-Slider.High:Hide();
+_G[Slider:GetName().."Low"]:Hide();
+_G[Slider:GetName().."High"]:Hide();
 Slider:SetAlpha(0)
 --Slider.Low:SetText("Poor");
 --Slider.High:SetText("Great");
@@ -1409,18 +1437,38 @@ function fupdate()
       num = bounce(num,0,1,1)
       --print(num2)
       testframe:SetAlpha(num_alpha)
-      testframe:SetPoint("BOTTOMRIGHT", posMark.x, 12*(1-num) + posMark.y);
+      testframe:SetPoint("BOTTOMRIGHT", TargetFramePortrait, "BOTTOMRIGHT", posMark.x, 12*(1-num) + posMark.y);
     else
       testframe:SetAlpha(1)
-      testframe:SetPoint("BOTTOMRIGHT", posMark.x, posMark.y);
+      testframe:SetPoint("BOTTOMRIGHT", TargetFramePortrait, "BOTTOMRIGHT", posMark.x, posMark.y);
       mark_animating = false
     end
   end
 end
 
+-- The tag's texture is white, tinted by the note: red negative, green positive, white neutral
+-- (the reds and greens the notes use in chat and tooltips).
+local markColors = {[-1] = {1,0,0}, [0] = {1,1,1}, [1] = {0,1,0}}
+local function tintMark()
+  local note = dbNotes[getName("target") or ""]
+  local c = markColors[note and note.mood or 0] or markColors[0]
+  texturee:SetVertexColor(c[1],c[2],c[3])
+end
+-- After a note is added, edited, renamed or deleted: the tag on your target matches it straight away.
+function refreshMark()
+  -- (asked here: the isElvUIInstalled/isShadowedUnitFrames locals are declared further down)
+  if (IsAddOnLoaded("ElvUI") and TargetFrame:IsVisible() == false) or IsAddOnLoaded("ShadowedUnitFrames") then return end
+  local name = getName("target")
+  if name and dbNotes[name] then
+    if testframe:IsShown() then tintMark() else addMark() end
+  else
+    testframe:Hide()
+  end
+end
 function addMark()
+  tintMark()
   testframe:Show()
-  if not settgsIRY.sound then PlaySound(73,"Master") end
+  if not settgsIRY.sound then PlaySound("igMainMenuOptionCheckBoxOn") end
   mark_clock = GetTime()
   mark_animating = true
 end
@@ -1475,12 +1523,14 @@ local chatMoodTex = {[-1] = "0:8",[0] = "8:16",[1] = "16:24"}
 local function chatMood(_,_,msg,name,...)
   if settgsIRY.chat then return false end
   local note = dbNotes[myRealm(name)]
-  if note then return false,"|TInterface\\AddOns\\IRememberYou\\mood:10:4:0:-1:24:20:"..chatMoodTex[note.mood]..":0:20|t "..msg,name,... end
+  if note then return false,"|TInterface\\AddOns\\IRememberYou\\mood:10:4:0:-1:32:32:"..chatMoodTex[note.mood]..":0:20|t "..msg,name,... end
   return false
 end
 
 local chatEvents = {
-  "CHAT_MSG_INSTANCE_CHAT",
+  "CHAT_MSG_BATTLEGROUND",
+  "CHAT_MSG_BATTLEGROUND_LEADER",
+  "CHAT_MSG_RAID_LEADER",
   "CHAT_MSG_PARTY",
   "CHAT_MSG_RAID",
   "CHAT_MSG_SAY",
@@ -1559,18 +1609,21 @@ function addMassPopup(party)
     editingText = ""
     editingMood = 0
   end
-  local popup = StaticPopup_Show("REMEMBER",nil,nil,data);
-  if popup ~= nil then popup:SetHeight(156) end
+  ShowRememberDialog(data)
 end
 
-hooksecurefunc("SetItemRef", function(link)
+-- 3.3.5's SetItemRef hands unknown link types to ItemRefTooltip, so handle ours first and stop there.
+local origSetItemRef = SetItemRef
+SetItemRef = function(link, ...)
 	local linkType,addon,action,param1 = strsplit(":", link)
 	if linkType == "addon" and addon == "IRememberYou" then
 	  local getData = loadstring("return "..param1)()
     if action == "Mass" then addMassPopup(getData)
     else addPopup(getData.class,getData.name) end
+    return
 	end
-end)
+	return origSetItemRef(link, ...)
+end
 
 function bts(bool)
   if bool then
@@ -1591,7 +1644,7 @@ local function printMass()
     end
   end
   link = link .. "}|h["..T["MASS2"].."]|h|r"..T["MASS3"]
-  C_Timer.After(2, function() print(link) end)
+  After(2, function() print(link) end)
 end
 
 local function printLeaver(name,class)
@@ -1603,6 +1656,45 @@ local myParty = {}
 local isElvUIInstalled, isShadowedUnitFrames, isRaiderIO, istotalRP3
 local moodColors = {"|cffFF0000","|cffFCC000","|cff00FF00"}
 local isAddOnLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+
+-- A remembered player's class, when it was not known at the time (typed in, or from a chat name).
+function classByName(name)
+  if not name then return "UNKNOWN" end
+  for _,unit in ipairs({"target","focus","mouseover"}) do
+    if UnitExists(unit) and UnitIsPlayer(unit) and getName(unit) == name then return select(2,UnitClass(unit)) or "UNKNOWN" end
+  end
+  local raid = GetNumRaidMembers()
+  for i = 1,(raid > 0 and raid or GetNumPartyMembers()) do
+    local unit = (raid > 0 and "raid" or "party")..i
+    if getName(unit) == name then return select(2,UnitClass(unit)) or "UNKNOWN" end
+  end
+  for i = 1,GetNumFriends() do
+    local n,_,cls = GetFriendInfo(i)
+    if n == name and cls then return locToEngClass(cls) end
+  end
+  if IsInGuild() then
+    for i = 1,GetNumGuildMembers(true) do
+      local n,_,_,_,cls = GetGuildRosterInfo(i)
+      if n == name and cls then return locToEngClass(cls) end
+    end
+  end
+  return "UNKNOWN"
+end
+local function learnClass(unit)
+  if not unit or not UnitIsPlayer(unit) then return end
+  local name = getName(unit)
+  if not name or not dbNotes[name] then return end
+  local class = select(2,UnitClass(unit))
+  if not class then return end
+  for _,m in ipairs(memory) do
+    if m.name == name and m.class == "UNKNOWN" then
+      m.class = class
+      if bigFrame:IsVisible() then
+        for i = 1,11 do if userFrames[i]:IsVisible() then userFrames[i].userFrameUpdateIcon() end end
+      end
+    end
+  end
+end
 
 local modernTooltip = (not classic) or (forever and TooltipDataProcessor ~= nil and Enum and Enum.TooltipDataType ~= nil)
 
@@ -1620,8 +1712,9 @@ if modernTooltip then TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataTy
       if note then tooltip:AddLine("\n" .. moodColors[note.mood+2] .. "[NOTE] |cffFFFFFF> " .. note.text) end
     end
 	end
-end) else hooksecurefunc("GameTooltip_HideBattlePetTooltip",function()
+end) else GameTooltip:HookScript("OnTooltipSetUnit",function()
   local _,unit = GameTooltip:GetUnit()
+  learnClass(unit)
 	if unit then
     local isPlayer = UnitIsPlayer(unit)
     if isPlayer then
@@ -1647,6 +1740,7 @@ function Main_OnEvent(self, event, arg1)
     end
     --print("changed target")
     local target_name = getName("target")
+    learnClass("target")
     testframe:Hide()
     if target_name and dbNotes[target_name] then addMark() end
   elseif event == "PLAYER_ENTERING_WORLD" then
@@ -1714,9 +1808,10 @@ function Main_OnEvent(self, event, arg1)
     end
     local LibDBIcon = LibStub("LibDBIcon-1.0")
     LibDBIcon:Register("IRememberYou",LDB,dbIRY.minimap)
-    buttonIRY = LibDBIcon:GetMinimapButton("IRememberYou")
+    buttonIRY = _G["LibDBIcon10_IRememberYou"]
     for _,region in ipairs({buttonIRY:GetRegions()}) do
-      if region:GetObjectType() == "Texture" and region:GetTexture() ~= 136477 then region:Hide() end
+      local tex = region:GetObjectType() == "Texture" and region:GetTexture()
+      if tex and not (type(tex) == "string" and tex:find("TrackingBorder")) then region:Hide() end
     end
     buttonIRY.texture = buttonIRY:CreateTexture(nil,"BACKGROUND")
     buttonIRY.texture:SetTexture("Interface\\AddOns\\IRememberYou\\icon")
@@ -1728,14 +1823,18 @@ function Main_OnEvent(self, event, arg1)
     local settgChat = newSetting(3,"Hide mood of the note in chat",settgsIRY.chat)
     local settgClassColor = newSetting(4,"Color names by class",settgsIRY.classColor)
     for _,note in ipairs(memory) do dbNotes[note.name] = {mood = note.mood,text = note.text} end
-  elseif event == "GROUP_ROSTER_UPDATE" then
+  elseif event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
     local numGroupMembers = GetNumGroupMembers()
+    if numGroupMembers == 0 then -- 3.3.5 has no GROUP_LEFT: an empty roster is leaving the group
+      myParty = {}
+      myParty[getName("player")] = {value = 1,class = select(2,UnitClass("player"))}
+    end
     if numGroupMembers > 0 then
       local updateIcons = false
       for key in pairs(myParty) do myParty[key].value = 2 end
       for i = 1,numGroupMembers do
         local nameMember,_,_,_,classMember
-        if forever then
+        if forever or classicEra then -- 3.3.5: GetRaidRosterInfo only answers in a raid, so read the units
           local unit
           if IsInRaid() then unit = "raid"..i
           elseif i < numGroupMembers then unit = "party"..i
@@ -1747,7 +1846,7 @@ function Main_OnEvent(self, event, arg1)
         end
         if nameMember ~= nil then
           if not myParty[nameMember] then
-            if not forever then classMember = locToEngClass(classMember) end
+            if not (forever or classicEra) then classMember = locToEngClass(classMember) end
             classMember = classMember or "UNKNOWN"
             myParty[nameMember] = {value = 1,class = classMember}
             for _,n in ipairs(memory) do if n.name == nameMember then
@@ -1782,13 +1881,37 @@ end
 local main = CreateFrame("Frame")
 main:SetScript('OnUpdate',fupdate)
 main:RegisterEvent("ADDON_LOADED")
-main:RegisterEvent("GROUP_ROSTER_UPDATE")
-main:RegisterEvent("GROUP_LEFT")
+main:RegisterEvent("PARTY_MEMBERS_CHANGED")
+main:RegisterEvent("RAID_ROSTER_UPDATE")
 main:RegisterEvent("PLAYER_ENTERING_WORLD")
 main:RegisterEvent("PLAYER_TARGET_CHANGED")
 if not classic then main:RegisterEvent("CHALLENGE_MODE_COMPLETED") end
-main:RegisterEvent("BOSS_KILL")
 main:SetScript("OnEvent", Main_OnEvent)
+
+-- 3.3.5 has no BOSS_KILL: watch the combat log for a dungeon's last encounter instead. The lists are
+-- TrinityCore's instance_encounters rows with lastEncounterDungeon > 0 (kill credit by creature, or by spell).
+local finalBossNpc, finalBossSpell = {}, {}
+for _,n in ipairs({639,1716,1853,2748,3654,3975,3977,4275,4421,4543,4829,5709,6487,7267,7358,7800,9018,9019,9568,
+  10184,10363,10440,10813,11486,11492,11501,11502,11520,11583,12201,12236,12258,14834,15339,15690,15727,15990,
+  16808,17257,17377,17537,17798,17881,17882,17942,17968,17977,18096,18344,18373,18473,18708,19044,19220,19622,
+  20912,21212,22917,23863,23980,24664,25315,26723,26861,27656,27978,28859,28860,28923,29120,29306,29311,31134,
+  34564,36502,36597,36658,38433,39863,
+  26632,35451}) do finalBossNpc[n] = true end -- + Tharon'ja and the Black Knight, whose credit is a spell but who do die
+for _,n in ipairs({58630,61863,65184,68663,72830}) do finalBossSpell[n] = true end
+local lastMassPrompt = 0
+local bossWatch = CreateFrame("Frame")
+bossWatch:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+bossWatch:SetScript("OnEvent",function(_,_,_,subEvent,_,_,_,destGUID,_,_,spellId)
+  local hit = false
+  if subEvent == "UNIT_DIED" and destGUID then
+    local kind = destGUID:sub(3,5)
+    if kind == "F13" or kind == "F15" then hit = finalBossNpc[tonumber(destGUID:sub(7,12),16)] end
+  elseif spellId and finalBossSpell[spellId] then hit = true end
+  if hit and GetTime() - lastMassPrompt > 60 and GetNumGroupMembers() > 1 and not IsInRaid() then
+    lastMassPrompt = GetTime()
+    printMass()
+  end
+end)
 
 function printMemory()
   for i, v in ipairs(memory) do
@@ -1854,7 +1977,7 @@ end
 
 SLASH_IRYMAP1 = "/irymap"
 SlashCmdList["IRYMAP"] = function(arg)
-  buttonIRY:SetShown(dbIRY.minimap.hide)
+  if dbIRY.minimap.hide then buttonIRY:Show() else buttonIRY:Hide() end
   dbIRY.minimap.hide = not dbIRY.minimap.hide
 end
 
@@ -1877,114 +2000,146 @@ IRYNameBox:SetAutoFocus(false)
 IRYNameBox:SetMaxLetters(100)
 IRYNameBox:SetFontObject(ChatFontNormal)
 
-IRYNameBox:SetScript("OnTabPressed", function()
-    local popup = IRYNameEditFrame:GetParent()
-    if popup then
-        local editBox = _G[popup:GetName() .. "EditBox"]
-        if editBox then editBox:SetFocus() end
-    end
-end)
-IRYNameBox:SetScript("OnEnterPressed", function()
-    local popup = IRYNameEditFrame:GetParent()
-    if popup then
-        local editBox = _G[popup:GetName() .. "EditBox"]
-        if editBox then editBox:SetFocus() end
-    end
-end)
+local function focusNote() if IRememberYouDialog and IRememberYouDialog.note then IRememberYouDialog.note:SetFocus() end end
+IRYNameBox:SetScript("OnTabPressed", focusNote)
+IRYNameBox:SetScript("OnEnterPressed", focusNote)
 
-local function getEditBox(parent)
-  return _G[parent:GetName() .. "EditBox"]
+-- One dialog for "remember" and "delete", in the Dragonflight art (the 3.3.5 popup's edit box has no middle
+-- piece, so widening it -- which the remember form needs -- split its border in two).
+local dlg = CreateFrame("Frame","IRememberYouDialog",UIParent)
+dlg:SetSize(320,200)
+dlg:SetPoint("CENTER",0,140)
+dlg:SetFrameStrata("DIALOG")
+dlg:EnableMouse(true)
+dlg:SetMovable(true)
+dlg:SetClampedToScreen(true)
+dlg:SetScript("OnMouseDown",dlg.StartMoving)
+dlg:SetScript("OnMouseUp",dlg.StopMovingOrSizing)
+IRY.Chrome(dlg,true)
+dlg:Hide()
+tinsert(UISpecialFrames,"IRememberYouDialog")
+dlg.text = dlg:CreateFontString(nil,"OVERLAY","GameFontHighlight")
+dlg.text:SetWidth(290)
+dlg.text:SetPoint("TOP",0,-26)
+dlg.note = IRY.Input(dlg,240,50)
+
+-- Class: a dropdown of the class names in their colours. When the game can tell their class (your
+-- target, focus, mouseover, group, friends list or guild) it is filled in and greyed out; only a player
+-- it cannot see -- added by name -- gets a choice, defaulting to what was stored or "?".
+local PICK_CLASSES = {"WARRIOR","PALADIN","HUNTER","ROGUE","PRIEST","DEATHKNIGHT","SHAMAN","MAGE","WARLOCK","DRUID","UNKNOWN"}
+local dlgClass, storedClass = "UNKNOWN", "UNKNOWN"
+local function classLabel(class)
+  if class == "UNKNOWN" or not RAID_CLASS_COLORS[class] then return "|cffaaaaaa? "..(UNKNOWN or "Unknown").."|r" end
+  local c = RAID_CLASS_COLORS[class]
+  return string.format("|cff%02x%02x%02x%s|r",c.r*255,c.g*255,c.b*255,LOCALIZED_CLASS_NAMES_MALE[class] or class)
 end
-StaticPopupDialogs["REMEMBER"] = {
-	text = T["POPUP"],
-	button1 = DONE,
-	button2 = CANCEL,
-	hasEditBox = 1,
-	maxLetters = 50,
-	OnAccept = function(self,data)
-    local editBox = getEditBox(self)
-		local text = editBox:GetText();
-		local nameText = IRYNameBox:GetText();
-    data.callback(text, nameText);
-	end,
-	EditBoxOnEnterPressed = function(self,data)
-    local editBox = getEditBox(self:GetParent())
-		local text = editBox:GetText();
-		local nameText = IRYNameBox:GetText();
-    data.callback(text, nameText);
-		self:GetParent():Hide();
-	end,
-  EditBoxOnEscapePressed = function(self)
-		self:GetParent():Hide();
-  end,
-	OnHide = function(self)
-    sliderTextureFrame:Hide()
-    IRYNameEditFrame:Hide()
-		ChatEdit_FocusActiveWindow();
-	end,
-  OnShow = function(self, data)
-    local editBox = getEditBox(self)
-    editBox:SetText("")
-    
-    if data and data.isMassAdd then
-      IRYNameEditFrame:Hide()
-    else
-      IRYNameEditFrame:Show()
-      IRYNameBox:SetText((data and data.playerName) or "")
-    end
+dlg.classRow = CreateFrame("Frame",nil,dlg)
+dlg.classRow:SetSize(240,26)
+local classLabelText = dlg.classRow:CreateFontString(nil,"OVERLAY","GameFontNormal")
+classLabelText:SetPoint("LEFT",0,2)
+classLabelText:SetText(CLASS or "Class:")
+local classDrop = CreateFrame("Frame","IRememberYouClassDropDown",dlg.classRow,"UIDropDownMenuTemplate")
+classDrop:SetPoint("LEFT",classLabelText,"RIGHT",-6,-2)
+UIDropDownMenu_SetWidth(classDrop,150)
+dlg.classDrop = classDrop
+local function setDlgClass(class)
+  dlgClass = (class and RAID_CLASS_COLORS[class]) and class or "UNKNOWN"
+  UIDropDownMenu_SetText(classDrop,classLabel(dlgClass))
+end
+UIDropDownMenu_Initialize(classDrop,function(self,level)
+  for _,class in ipairs(PICK_CLASSES) do
+    local info = UIDropDownMenu_CreateInfo()
+    info.text = classLabel(class)
+    info.value = class
+    info.checked = (class == dlgClass)
+    info.func = function() setDlgClass(class) CloseDropDownMenus() end
+    UIDropDownMenu_AddButton(info,level)
+  end
+end)
+-- Lock the dropdown to the live class when the game knows it; otherwise free, on the stored class.
+local function updateClassLock(name)
+  local live = classByName(name and stripRealm(strtrim(name)) or nil)
+  if live ~= "UNKNOWN" then
+    setDlgClass(live)
+    UIDropDownMenu_DisableDropDown(classDrop)
+  else
+    setDlgClass(storedClass)
+    UIDropDownMenu_EnableDropDown(classDrop)
+  end
+end
+IRYNameBox:HookScript("OnTextChanged",function(self) if dlg:IsShown() and dlg.classRow:IsShown() then updateClassLock(self:GetText()) end end)
+dlg.ok = IRY.RedButton(dlg,DONE,110,22)
+dlg.ok:SetPoint("BOTTOMRIGHT",dlg,"BOTTOM",-6,14)
+dlg.cancel = IRY.RedButton(dlg,CANCEL,110,22)
+dlg.cancel:SetPoint("BOTTOMLEFT",dlg,"BOTTOM",6,14)
+dlg.cancel:SetScript("OnClick",function() dlg:Hide() end)
+dlg:SetScript("OnHide",function()
+  sliderTextureFrame:Hide()
+  IRYNameEditFrame:Hide()
+  dlg.note:ClearFocus()
+end)
+local function acceptRemember()
+  local data = dlg.data
+  dlg:Hide()
+  if data and data.callback then data.callback(dlg.note:GetText(),IRYNameBox:GetText(),(not data.isMassAdd) and dlgClass or nil) end
+end
+dlg.note:SetScript("OnEnterPressed",acceptRemember)
 
-    if editingName ~= "" then
-      Slider:SetValue(0.1)
-      Slider:SetValue(editingMood)
-      editBox:SetText(editingText)
-    else
-      Slider:SetValue(0.1)
-      Slider:SetValue(0)
-    end
-    
-    sliderTextureFrame:Show()
-    
-    local topText = _G[self:GetName().."Text"]
-    topText:ClearAllPoints()
-    topText:SetPoint("TOP", self, "TOP", 0, -16)
-    
-    if data and data.isMassAdd then
-        sliderTextureFrame:SetParent(self)
-        sliderTextureFrame:ClearAllPoints()
-        sliderTextureFrame:SetPoint("TOP", self, "TOP", 0, -42)
+ShowRememberDialog = function(data)
+  dlg.data = data
+  dlg.title:SetText(T["FRAMETITLE"])
+  dlg.text:SetText(T["POPUP"])
+  local mass = data and data.isMassAdd
+  local y = -50
+  if mass then IRYNameEditFrame:Hide()
+  else
+    IRYNameEditFrame:SetParent(dlg)
+    IRYNameEditFrame:ClearAllPoints()
+    IRYNameEditFrame:SetPoint("TOP",dlg,"TOP",0,y)
+    IRYNameBox:SetText((data and data.playerName) or "")
+    IRYNameEditFrame:Show()
+    y = y - 32
+    dlg.classRow:ClearAllPoints()
+    dlg.classRow:SetPoint("TOP",dlg,"TOP",0,y)
+    storedClass = (data and data.class) or "UNKNOWN"
+    dlg.classRow:Show()
+    updateClassLock(data and data.playerName)
+    y = y - 32
+  end
+  if mass then dlg.classRow:Hide() end
+  sliderTextureFrame:SetParent(dlg)
+  sliderTextureFrame:ClearAllPoints()
+  sliderTextureFrame:SetPoint("TOP",dlg,"TOP",0,y)
+  sliderTextureFrame:Show()
+  Slider:SetValue(0.1)
+  Slider:SetValue(editingName ~= "" and editingMood or 0)
+  dlg.note:ClearAllPoints()
+  dlg.note:SetPoint("TOP",dlg,"TOP",4,y - 38)
+  dlg.note:SetText(editingName ~= "" and editingText or "")
+  dlg.note:Show()
+  dlg:SetHeight(-y + 38 + 20 + 50)
+  dlg.ok:SetText(DONE)
+  dlg.ok:SetScript("OnClick",acceptRemember)
+  dlg.cancel:SetText(CANCEL)
+  dlg:Show()
+  dlg.note:SetFocus()
+end
 
-        editBox:ClearAllPoints()
-        editBox:SetPoint("TOP", self, "TOP", 0, -82)
-    else
-        IRYNameEditFrame:SetParent(self)
-        IRYNameEditFrame:ClearAllPoints()
-        IRYNameEditFrame:SetPoint("TOP", self, "TOP", 0, -42)
+ShowConfirmDialog = function(text,onAccept)
+  dlg.data = nil
+  dlg.title:SetText(T["FRAMETITLE"])
+  dlg.text:SetText(text)
+  IRYNameEditFrame:Hide()
+  sliderTextureFrame:Hide()
+  dlg.note:Hide()
+  dlg.classRow:Hide()
+  dlg:SetHeight(110)
+  dlg.ok:SetText(YES)
+  dlg.ok:SetScript("OnClick",function() dlg:Hide() onAccept() end)
+  dlg.cancel:SetText(NO)
+  dlg:Show()
+end
 
-        sliderTextureFrame:SetParent(self)
-        sliderTextureFrame:ClearAllPoints()
-        sliderTextureFrame:SetPoint("TOP", self, "TOP", 0, -76)
-
-        editBox:ClearAllPoints()
-        editBox:SetPoint("TOP", self, "TOP", 0, -116)
-    end
-    
-    editBox:SetWidth(240)
-    editBox:EnableMouse(true)
-    
-    local doneButton = _G[self:GetName() .. "Button1"]
-    local cancelButton = _G[self:GetName() .. "Button2"]
-    doneButton:ClearAllPoints()
-    doneButton:SetPoint("BOTTOMRIGHT", self, "BOTTOM", -6, 16)
-    cancelButton:ClearAllPoints()
-    cancelButton:SetPoint("BOTTOMLEFT", self, "BOTTOM", 6, 16)
-
-		editBox:SetFocus();
-	end,
-	timeout = 0,
-	exclusive = 1,
-	whileDead = 1,
-	hideOnEscape = true
-};
 
 --[[hooksecurefunc("LFGListSearchPanel_UpdateResults",function(self)
   if not self.searching then
@@ -1998,9 +2153,12 @@ end)]]--
 
 function addPopup(class,name)
   name = stripRealm(name)
+  if not class or class == "UNKNOWN" then class = classByName(name) end
   local data = {}
   data.playerName = name
-  data.callback = function(argNote, argName)
+  data.class = class
+  data.callback = function(argNote, argName, argClass)
+    if argClass then class = argClass end
     if not argName or strtrim(argName) == "" then argName = name end
     argName = stripRealm(argName)
     local edit = false
@@ -2010,6 +2168,7 @@ function addPopup(class,name)
         memory[i].name = argName
         memory[i].mood = snapValue
         memory[i].text = argNote
+        if argClass or (class and class ~= "UNKNOWN") then memory[i].class = class end
         if oldName ~= argName then
             dbNotes[argName] = dbNotes[oldName]
             dbNotes[oldName] = nil
@@ -2017,6 +2176,7 @@ function addPopup(class,name)
         dbNotes[argName] = {mood = snapValue,text = argNote}
         edit = true
         print(T["EDITED"]);
+        refreshMark()
         break
       end
     end
@@ -2028,9 +2188,7 @@ function addPopup(class,name)
       --[[if announce == true then
         SendChatMessage(T["ANNOUNCE1"].." "..argName..T["ANNOUNCE2"].."!","EMOTE")
       end]]--
-      if not isElvUIInstalled and not isShadowedUnitFrames then
-        addMark()
-      end
+      refreshMark()
       isSorted = false
       sortByNameAZ = true
       sortByDescriptionAZ = true
@@ -2063,14 +2221,13 @@ function addPopup(class,name)
     editingText = ""
     editingMood = 0
   end
-  local popup = StaticPopup_Show("REMEMBER",nil,nil,data);
-  if popup ~= nil then popup:SetHeight(190) end
+  ShowRememberDialog(data)
 end
 
-local function addRememberButton(class,name)
-  UIDropDownMenu_AddSeparator()
+local function addRememberButton(class,name,which)
   local info2 = UIDropDownMenu_CreateInfo();
   info2.text = T["REMEMBER"]
+  info2.owner = which
   info2.notCheckable = true;
   info2.func = function() addPopup(class,name) end
   UIDropDownMenu_AddButton(info2,1)
@@ -2109,6 +2266,29 @@ local function modify(_,parent,data)
       name = data.name
       addPopup(class,name)
     end
+  end)
+end
+if not (Menu and Menu.ModifyMenu) then
+  -- 3.3.5: add "Remember" to the stock unit menus (target/party/raid/chat names) once they are built.
+  -- Done the way AddFriend (a long-lived 3.3.5 addon) does it: a secure post-hook that only appends at
+  -- level 1 of a player's menu, and never in combat, when the menu's protected actions (focus, target)
+  -- must stay untouched. PitBull4 prefixes its menu types with "PB4_".
+  local popupWhich = {PLAYER = true, PARTY = true, RAID_PLAYER = true, RAID = true, FRIEND = true}
+  hooksecurefunc("UnitPopup_ShowMenu",function(dropdownMenu, which, unit, name)
+    if InCombatLockdown() or UIDROPDOWNMENU_MENU_LEVEL ~= 1 or type(which) ~= "string" then return end
+    which = which:gsub("^PB4_","")
+    if not popupWhich[which] then return end
+    local class, fullName = "UNKNOWN", name
+    if unit and UnitExists(unit) then
+      if not UnitIsPlayer(unit) or UnitIsUnit(unit,"player") then return end
+      fullName = getName(unit)
+      class = select(2,UnitClass(unit)) or "UNKNOWN"
+    elseif name and dropdownMenu and dropdownMenu.server and dropdownMenu.server ~= "" then
+      fullName = name.."-"..dropdownMenu.server
+    end
+    if class == "UNKNOWN" then class = classByName(fullName) end
+    if not fullName or fullName == UnitName("player") then return end
+    addRememberButton(class,fullName,which)
   end)
 end
 if Menu and Menu.ModifyMenu then
